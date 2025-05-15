@@ -1,8 +1,8 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/dbConfig");
 
-const User = sequelize.define(
-    "user",
+const OTP = sequelize.define(
+    "otp",
     {
         id: {
             type: DataTypes.BIGINT,
@@ -11,15 +11,15 @@ const User = sequelize.define(
             allowNull: false
           },
 
-        firstName: {
+        userId: {
             type: DataTypes.STRING,
             allowNull: false
           },
-          lastName: {
+          otp: {
             type: DataTypes.STRING,
             allowNull: false
           },
-          phoneNumber: {
+          role: {
             type: DataTypes.STRING,
             allowNull: false
           },
@@ -27,29 +27,17 @@ const User = sequelize.define(
             type: DataTypes.STRING,
             allowNull: true,
           },
-          password: {
-            type: DataTypes.STRING,
+          createdAt: {
+            type: DataTypes.DATE,
             allowNull: true,
           },
-          role: {
-            type: DataTypes.ENUM,
-            values: ['Admin', 'Supervisor', "Marshall"],
-            allowNull: false,
-            validate: {
-              isIn: {
-                args: [['Admin', 'Supervisor', "Marshall"]],
-                msg: "Role must be either 'Admin', 'Supervisor' or 'Marshall'"
-              }
-            }
-          },
-          createdAt: {
+          expiresAt: {
             type: DataTypes.DATE, 
             allowNull: true,
-            defaultValue: DataTypes.NOW
-          },
+          }
     },{
         timestamps: false 
       }
 );
 
-module.exports = User;
+module.exports = OTP;
