@@ -1,5 +1,8 @@
-const { where } = require("sequelize");
+const { where, Op } = require("sequelize");
 const Street = require("../models/street");
+const { Shift } = require("../models");
+const { generateWeeklyScheduleData } = require("../utils/weeklySchedule");
+const { default: getNextWeekDates } = require("../utils/getDate");
 
 exports.create = async (req, res) => {
   const { streetCode, priority, status } = req.body;
@@ -39,6 +42,35 @@ exports.allStreet = async (req, res) => {
   }
 };
 
+exports.active = async (req, res) => {
+  try {
+    const streets = await Street.findAll({ order: [["id", "ASC"]] },{where: {status: "Active"}});
+    const count = await Street.count({where: {status: "Active"}});
+    return res.status(200).json({ success: true,total:count, data: streets });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error", error });
+  }
+};
+
+exports.inactive = async (req, res) => {
+  try {
+    const streets = await Street.findAll({ order: [["id", "ASC"]] },{where: {status: "Inactive"}});
+    const count = await Street.count({where: {status: "Inactive"}});
+    return res.status(200).json({ success: true,total:count, data: streets });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error", error });
+  }
+};
+
+exports.underMaintenance = async (req, res) => {
+  try {
+    const streets = await Street.findAll({ order: [["id", "ASC"]] },{where: {status: "Under Maintainance"}});
+    const count = await Street.count({where: {status: "Under Maintainance"}});
+    return res.status(200).json({ success: true,total:count, data: streets });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error", error });
+  }
+};
 exports.update = async (req, res) => {
   const { id, streetCode, priority, status } = req.body;
 
@@ -112,6 +144,17 @@ exports.delete = async (req, res) => {
     }
 
     await street.destroy();
+    const today = new Date().toISOString().split("T")[0];
+    await Shift.destroy({
+      where: {
+        date: {
+          [Op.gte]: today
+        }
+      }
+    });
+
+      const shifts = await generateWeeklyScheduleData();
+      await Shift.bulkCreate(shifts);
     return res.status(200).json({ success: true, message: "Street deleted successfully" });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Internal server error", error });

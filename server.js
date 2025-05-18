@@ -25,10 +25,12 @@ app.use(
 const authRouter = require("./routes/authRoute");
 const supervisorRouter = require("./routes/supervsiorRoute");
 const streetRouter = require("./routes/streetRoute");
+const shiftRouter = require("./routes/shiftRoute");
 
 app.use("/auth", authRouter);
 app.use("/supervisor", supervisorRouter);
 app.use("/street", streetRouter);
+app.use("/shift", shiftRouter);
 
 // app.use("*", (req, res) => {
 //     res.status(404).json({
