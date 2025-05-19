@@ -236,7 +236,7 @@ exports.forgotPassword = async (req, res) => {
     }
 
     const token = crypto.randomBytes(32).toString("hex");
-    const resetLink = `https://localhost:3000/reset-password?token=${token}&userId=${existingUser.id}`;
+    const resetLink = `http://localhost:3000/reset-password?token=${token}&userId=${existingUser.id}`;
     const salt = await bcrypt.genSalt();
     const hashedOTP = await bcrypt.hash(token, salt);
 
@@ -520,17 +520,18 @@ exports.delete = async (req, res) => {
 
         supervisorLoadMap[leastLoadedSupervisorId]++;
       }
-
+      const today = new Date().toISOString().split("T")[0];
+      await Shift.destroy({
+        where: {
+          date: {
+            [Op.gte]: today,
+          },
+        },
+      });
+      
       await Relationship.destroy({ where: { supervisorId: userId } });
       await User.destroy({ where: { id: userId } });
-      const today = new Date().toISOString().split("T")[0];
-    await Shift.destroy({
-      where: {
-        date: {
-          [Op.gte]: today
-        }
-      }
-    });
+      
 
       const shifts = await generateWeeklyScheduleData();
       await Shift.bulkCreate(shifts);
@@ -546,13 +547,13 @@ exports.delete = async (req, res) => {
       await User.destroy({ where: { id: userId } });
 
       const today = new Date().toISOString().split("T")[0];
-    await Shift.destroy({
-      where: {
-        date: {
-          [Op.gte]: today
-        }
-      }
-    });
+      await Shift.destroy({
+        where: {
+          date: {
+            [Op.gte]: today,
+          },
+        },
+      });
 
       const shifts = await generateWeeklyScheduleData();
       await Shift.bulkCreate(shifts);
