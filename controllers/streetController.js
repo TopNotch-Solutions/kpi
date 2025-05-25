@@ -26,6 +26,18 @@ exports.create = async (req, res) => {
          return res.status(400).json({ success: false, message: "Street code already in use"});
     }
     await Street.create({ streetCode, priority,status });
+    if(status === "Active"){
+      const today = new Date().toISOString().split("T")[0];
+      await Shift.destroy({
+        where: {
+          date: {
+            [Op.gte]: today,
+          },
+        },
+      });
+      const shifts = await generateWeeklyScheduleData();
+      await Shift.bulkCreate(shifts);
+    }
     return res.status(201).json({ success: true, message: "Street created successfully" });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Internal server error", error });
@@ -71,6 +83,25 @@ exports.underMaintenance = async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal server error", error });
   }
 };
+exports.single = async (req, res) => {
+  const { id } = req.params;
+ if (!id)
+    return res
+      .status(400)
+      .json({ success: false, message: "Street id not provided" });
+  try {
+    const streets = await Street.findAll({where: {id}});
+    console.log(streets)
+    if(!streets){
+       return res
+      .status(404)
+      .json({ success: false, message: "Street not found" });
+    }
+    return res.status(200).json({ success: true, data: streets });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error", error });
+  }
+};
 exports.update = async (req, res) => {
   const { id, streetCode, priority, status } = req.body;
 
@@ -92,13 +123,11 @@ exports.update = async (req, res) => {
     if (!street) {
       return res.status(404).json({ success: false, message: "Street not found" });
     }
+    console.log("My street: ",street);
+    console.log("status: ",status)
+    await Street.update({status, priority, streetCode},{where: {id}})
 
-    street.streetCode = streetCode;
-    street.priority = priority;
-    street.status = status;
-    await street.save();
-
-    return res.status(200).json({ success: true, message: "Street updated successfully", data: street });
+    return res.status(200).json({ success: true, message: "Street updated successfully" });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Internal server error", error });
   }

@@ -4,6 +4,7 @@ const authRouter = Router();
 
 authRouter.post('/sign-up', authController.signup);  
 authRouter.post('/login', authController.login);
+authRouter.post('/user-details', authController.userDetails);
 authRouter.post('/forgot-password', authController.forgotPassword);
 authRouter.put('/change-password', authController.changePassword);
 authRouter.put('/newPassword',  authController.newPassword)

@@ -1,4 +1,4 @@
-const { where } = require("sequelize");
+const { where, Op } = require("sequelize");
 const User = require("../models/user");
 const Relationship = require("../models/relationship");
 
@@ -33,7 +33,7 @@ exports.allMarshalls = async (req, res) => {
     try {
     const users = await User.findAll({
         where:{role: "Marshall"},
-      attributes: {
+        attributes: {
         exclude: ['password'], 
       },
       order: [['createdAt', 'DESC']], 
@@ -106,6 +106,34 @@ exports.allAdmins = async (req, res) => {
       message: "Admins retrieved successfully",
       total: totalCount,
       users,
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      status: false,
+      message: "Internal server error",
+      error,
+    });
+  }
+}
+exports.allDevices = async (req, res) => {
+    try {
+    
+    const totalCount = await User.count({
+  where: {
+    device: {
+      [Op.and]: [
+        { [Op.not]: null },
+        { [Op.ne]: "" }
+      ]
+    }
+  }
+});
+
+    return res.status(200).json({
+      status: true,
+      message: "Device count retrieved successfully",
+      total: totalCount,
     });
 
   } catch (error) {

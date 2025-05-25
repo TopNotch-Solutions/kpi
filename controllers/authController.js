@@ -10,10 +10,11 @@ const Relationship = require("../models/relationship");
 const { Shift } = require("../models");
 const { default: getNextWeekDates } = require("../utils/getDate");
 const { generateWeeklyScheduleData } = require("../utils/weeklySchedule");
+const Street = require("../models/street");
 require("dotenv").config();
 
 exports.signup = async (req, res) => {
-  let { firstname, lastname, email, phoneNumber, role } = req.body;
+  let { firstname, lastname, email, phoneNumber, role, device } = req.body;
   if (!firstname)
     return res
       .status(400)
@@ -96,13 +97,22 @@ exports.signup = async (req, res) => {
           (a, b) => a[1] - b[1]
         )[0][0];
       }
-
+      const existingDevice = await User.findOne({
+        where:{device}
+      });
+      if(existingDevice){
+        return res.status(409).json({
+        status: false,
+        message: `Device already allocated to a Marshall.`,
+      });
+      }
       const marshall = await User.create({
         firstName: firstname,
         lastName: lastname,
         email: email || null,
         phoneNumber,
         password: null,
+        device,
         role,
       });
       await Relationship.create({
@@ -204,6 +214,7 @@ exports.login = async (req, res) => {
       firstname: user.firstName,
       lastname: user.lastName,
       email: user.email,
+      contactNumber: user.phoneNumber,
       role: user.role,
     };
 
@@ -219,6 +230,30 @@ exports.login = async (req, res) => {
       .json({ status: false, message: "Internal server error", err });
   }
 };
+
+exports.userDetails = async (req, res) => {
+   const { email } = req.body;
+   if (!email)
+    return res
+      .status(400)
+      .json({ success: false, message: "Email not provided" });
+      try {
+    const existingUser = await User.findOne({ where: { email } });
+    if (!existingUser) {
+      return res
+        .status(404)
+        .json({ status: false, message: "User not found!" });
+    }
+    console.log(existingUser)
+    return res.status(200).json({status: true, message: "User successfully retrieved!", data: existingUser})
+  }catch (err) {
+    return res
+      .status(500)
+      .json({ status: false, message: "Internal server error", err });
+  }
+
+}
+
 
 exports.forgotPassword = async (req, res) => {
   const { email } = req.body;
@@ -374,9 +409,19 @@ exports.details = async (req, res) => {
         where: { id: userId },
       }
     );
+    const user = await User.findOne({where: {id:userId}});
+    const newUser = {
+      id: user.id,
+      firstname: user.firstName,
+      lastname: user.lastName,
+      email: user.email,
+      contactNumber: user.phoneNumber,
+      role: user.role,
+    };
     return res.status(200).json({
       status: true,
       message: "User details successfully updated",
+      currentUser: newUser
     });
   } catch (err) {
     return res
@@ -385,7 +430,7 @@ exports.details = async (req, res) => {
   }
 };
 exports.detailsUser = async (req, res) => {
-  let { firstname, lastname, email, phoneNumber, role } = req.body;
+  let { firstname, lastname, email, phoneNumber, role, device } = req.body;
   let { userId } = req.params;
   if (!firstname)
     return res
@@ -439,6 +484,7 @@ exports.detailsUser = async (req, res) => {
           email,
           phoneNumber,
           role,
+          device: device || "",
           password: null,
         },
         {
@@ -466,10 +512,10 @@ exports.delete = async (req, res) => {
       .status(400)
       .json({ success: false, message: "User ID not provided" });
   }
-
+  console.log("My email" , userId)
   try {
-    const isUser = await User.findOne({ where: { id: userId } });
-
+    const isUser = await User.findOne({ where: { email: userId } });
+    console.log(isUser)
     if (!isUser) {
       return res.status(404).json({
         status: false,
@@ -479,7 +525,7 @@ exports.delete = async (req, res) => {
 
     if (isUser.role === "Supervisor") {
       const assignedRelationships = await Relationship.findAll({
-        where: { supervisorId: userId },
+        where: { supervisorId: isUser.id },
       });
 
       const marshallIds = assignedRelationships.map((rel) => rel.marshallId);
@@ -487,7 +533,7 @@ exports.delete = async (req, res) => {
       const otherSupervisors = await User.findAll({
         where: {
           role: "Supervisor",
-          id: { [Op.ne]: userId },
+          id: { [Op.ne]: isUser.id },
         },
       });
 
@@ -498,7 +544,14 @@ exports.delete = async (req, res) => {
             "Cannot delete supervisor: no other supervisors available to reassign marshalls",
         });
       }
-
+      const today = new Date().toISOString().split("T")[0];
+      await Shift.destroy({
+        where: {
+          date: {
+            [Op.gte]: today,
+          },
+        },
+      });
       const supervisorLoadMap = {};
 
       for (const supervisor of otherSupervisors) {
@@ -520,19 +573,29 @@ exports.delete = async (req, res) => {
 
         supervisorLoadMap[leastLoadedSupervisorId]++;
       }
-      const today = new Date().toISOString().split("T")[0];
-      await Shift.destroy({
-        where: {
-          date: {
-            [Op.gte]: today,
-          },
-        },
-      });
       
-      await Relationship.destroy({ where: { supervisorId: userId } });
-      await User.destroy({ where: { id: userId } });
       
-
+      await Relationship.destroy({ where: { supervisorId: isUser.id } });
+      await User.destroy({ where: { id: isUser.id } });
+      
+      const existingStreet = await Street.count();
+    if(existingStreet === 0){
+      return res
+      .status(200)
+      .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
+    }
+    const existingSupervisor = await User.count({where: {role: "Supervisor"}});
+     if(existingSupervisor === 0){
+       return res
+      .status(200)
+      .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
+    }
+    const existingMarshall = await User.count({where: {role: "Marshall"}});
+     if(existingMarshall === 0){
+       return res
+      .status(200)
+      .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
+    }
       const shifts = await generateWeeklyScheduleData();
       await Shift.bulkCreate(shifts);
 
@@ -542,10 +605,6 @@ exports.delete = async (req, res) => {
           "User successfully deleted and marshalls reassigned (if applicable).",
       });
     } else if (isUser.role === "Marshall") {
-      await Relationship.destroy({ where: { marshallId: userId } });
-
-      await User.destroy({ where: { id: userId } });
-
       const today = new Date().toISOString().split("T")[0];
       await Shift.destroy({
         where: {
@@ -554,16 +613,36 @@ exports.delete = async (req, res) => {
           },
         },
       });
+      await Relationship.destroy({ where: { marshallId: isUser.id } });
 
+      await User.destroy({ where: { id: isUser.id } });
+      const existingStreet = await Street.count();
+    if(existingStreet === 0){
+      return res
+      .status(200)
+      .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
+    }
+    const existingSupervisor = await User.count({where: {role: "Supervisor"}});
+     if(existingSupervisor === 0){
+       return res
+      .status(200)
+      .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
+    }
+    const existingMarshall = await User.count({where: {role: "Marshall"}});
+     if(existingMarshall === 0){
+       return res
+      .status(200)
+      .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
+    }
       const shifts = await generateWeeklyScheduleData();
       await Shift.bulkCreate(shifts);
-
+      console.log("deleting user.......................",userId)
       return res.status(200).json({
         status: true,
         message: "Marshall successfully deleted and schedule updated.",
       });
     } else {
-      await User.destroy({ where: { id: userId } });
+      await User.destroy({ where: { id: isUser.id } });
 
       return res.status(200).json({
         status: true,
