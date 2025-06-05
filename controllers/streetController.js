@@ -5,7 +5,7 @@ const { generateWeeklyScheduleData } = require("../utils/weeklySchedule");
 const { default: getNextWeekDates } = require("../utils/getDate");
 
 exports.create = async (req, res) => {
-  const { streetCode, priority, status } = req.body;
+  const { streetCode, priority, status, morningShift, afternoonShift } = req.body;
 
   if (!streetCode) {
     return res.status(400).json({ success: false, message: "Street code is required" });
@@ -25,9 +25,17 @@ exports.create = async (req, res) => {
     if(existingStreet){
          return res.status(400).json({ success: false, message: "Street code already in use"});
     }
-    await Street.create({ streetCode, priority,status });
-    if(status === "Active"){
-      const today = new Date().toISOString().split("T")[0];
+    await Street.create({ streetCode, priority,status, morningShift, afternoonShift });
+    const today = new Date().toISOString().split("T")[0];
+    const count = await Shift.count({
+        where: {
+          date: {
+            [Op.gte]: today,
+          },
+        },
+      });
+
+    if(status === "Active" && count >= 1){
       await Shift.destroy({
         where: {
           date: {
@@ -103,7 +111,7 @@ exports.single = async (req, res) => {
   }
 };
 exports.update = async (req, res) => {
-  const { id, streetCode, priority, status } = req.body;
+  const { id, streetCode, priority, status,morningShift,  afternoonShift } = req.body;
 
   if (!id) {
     return res.status(400).json({ success: false, message: "Street ID  are required" });
@@ -125,7 +133,7 @@ exports.update = async (req, res) => {
     }
     console.log("My street: ",street);
     console.log("status: ",status)
-    await Street.update({status, priority, streetCode},{where: {id}})
+    await Street.update({status, priority, streetCode,morningShift, afternoonShift},{where: {id}})
 
     return res.status(200).json({ success: true, message: "Street updated successfully" });
   } catch (error) {
@@ -174,7 +182,15 @@ exports.delete = async (req, res) => {
 
     await street.destroy();
     const today = new Date().toISOString().split("T")[0];
-    await Shift.destroy({
+    const count =  await Shift.count({
+      where: {
+        date: {
+          [Op.gte]: today
+        }
+      }
+    });
+    if(count >= 1){
+      await Shift.destroy({
       where: {
         date: {
           [Op.gte]: today
@@ -184,6 +200,8 @@ exports.delete = async (req, res) => {
 
       const shifts = await generateWeeklyScheduleData();
       await Shift.bulkCreate(shifts);
+    }
+    
     return res.status(200).json({ success: true, message: "Street deleted successfully" });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Internal server error", error });

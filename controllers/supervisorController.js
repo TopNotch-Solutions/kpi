@@ -1,6 +1,5 @@
 const { where, Op } = require("sequelize");
 const User = require("../models/user");
-const Relationship = require("../models/relationship");
 
 exports.allUsers = async (req, res) => {
   try {
@@ -144,49 +143,3 @@ exports.allDevices = async (req, res) => {
     });
   }
 }
-exports.myMarshalls = async (req, res) => {
-  const { id } = req.body;
-  if (!id) return res.status(400).json({ success: false, message: "Supervisor id not provided" });
-
-  const existingSupervisor = await User.findOne({ where: { id } });
-
-  if (!existingSupervisor) {
-    return res.status(404).json({ status: false, message: "Supervisor not found" });
-  }
-
-  try {
-    const allMarshalls = await Relationship.findAll({
-      where: { supervisorId: id },
-      attributes: ["marshallId"],
-    });
-
-    if (!allMarshalls || allMarshalls.length === 0) {
-      return res.status(404).json({ status: false, message: "No marshalls found for the supervisor" });
-    }
-
-    const marshallIds = allMarshalls.map(rel => rel.marshallId);
-
-    const marshallDetails = await User.findAll({
-      where: { id: marshallIds },
-      attributes: { exclude: ['password'] },
-    });
-
-    const count = await User.count({
-         where: { id: marshallIds },
-    })
-
-    return res.status(200).json({
-      status: true,
-      message: "Marshalls retrieved successfully",
-      total: count,
-      data: marshallDetails,
-    });
-
-  } catch (error) {
-    return res.status(500).json({
-      status: false,
-      message: "Internal server error",
-      error,
-    });
-  }
-};

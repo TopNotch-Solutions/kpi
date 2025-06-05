@@ -36,7 +36,17 @@ const Street = sequelize.define(
                 msg: "status must be either 'Active', 'Inactive' or 'Under Maintainance'"
               }
             }
-          }
+          },
+          morningShift: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            defaultValue: 0
+          },
+          afternoonShift: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            defaultValue: 0
+          },
     },{
         timestamps: false 
       }

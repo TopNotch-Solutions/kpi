@@ -1,6 +1,5 @@
-const Relationship = require("../models/relationship");
 const { User, Shift } = require("../models/index");
-const { default: getNextWeekDates } = require("../utils/getDate");
+const getNextWeekDates  = require("../utils/getDate");
 const { Op, where } = require("sequelize");
 const { generateWeeklyScheduleData } = require("../utils/weeklySchedule");
 const Street = require("../models/street");
@@ -12,12 +11,6 @@ exports.generateWeeklySchedule = async (req, res) => {
       return res
       .status(500)
       .json({ success: false, message: "There are no streets to allocate marshalls." });
-    }
-    const existingSupervisor = await User.count({where: {role: "Supervisor"}});
-     if(existingSupervisor === 0){
-      return res
-      .status(500)
-      .json({ success: false, message: "There are no supervisors to allocate marshalls to." });
     }
     const existingMarshall = await User.count({where: {role: "Marshall"}});
      if(existingMarshall === 0){

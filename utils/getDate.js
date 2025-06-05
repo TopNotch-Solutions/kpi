@@ -9,4 +9,4 @@ function getNextWeekDates() {
   }
   return dates;
 }
-export default getNextWeekDates;
+module.exports = getNextWeekDates;

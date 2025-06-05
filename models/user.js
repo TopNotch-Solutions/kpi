@@ -11,12 +11,12 @@ const User = sequelize.define("user", {
   device: { type: DataTypes.STRING, allowNull: true, defaultValue: "" },
   role: {
     type: DataTypes.ENUM,
-    values: ['Admin', 'Supervisor', 'Marshall'],
+    values: ['Admin','Marshall'],
     allowNull: false,
     validate: {
       isIn: {
-        args: [['Admin', 'Supervisor', 'Marshall']],
-        msg: "Role must be either 'Admin', 'Supervisor' or 'Marshall'"
+        args: [['Admin', 'Marshall']],
+        msg: "Role must be either 'Admin' or 'Marshall'"
       }
     }
   },

@@ -6,35 +6,22 @@ const generateRandomString = require("../utils/generateString");
 const { createToken } = require("../utils/createToken");
 const OTP = require("../models/otp");
 const crypto = require("crypto");
-const Relationship = require("../models/relationship");
 const { Shift } = require("../models");
-const { default: getNextWeekDates } = require("../utils/getDate");
+const getNextWeekDates = require("../utils/getDate");
 const { generateWeeklyScheduleData } = require("../utils/weeklySchedule");
 const Street = require("../models/street");
 require("dotenv").config();
 
 exports.signup = async (req, res) => {
   let { firstname, lastname, email, phoneNumber, role, device } = req.body;
-  if (!firstname)
-    return res
-      .status(400)
-      .json({ success: false, message: "First name not provided" });
-  if (!lastname)
-    return res
-      .status(400)
-      .json({ success: false, message: "Last name not provided" });
-  if (!phoneNumber)
-    return res
-      .status(400)
-      .json({ success: false, message: "Phone number not provided" });
-  if (!role)
-    return res
-      .status(400)
-      .json({ success: false, message: "Role not provided" });
-  if (role !== "Marshall" && !email)
-    return res
-      .status(400)
-      .json({ success: false, message: "Email not provided" });
+
+  if (!firstname || !lastname || !phoneNumber || !role) {
+    return res.status(400).json({ success: false, message: "Missing required fields" });
+  }
+
+  if (role !== "Marshall" && !email) {
+    return res.status(400).json({ success: false, message: "Email not provided" });
+  }
 
   const password = generateRandomString();
 
@@ -44,97 +31,23 @@ exports.signup = async (req, res) => {
     });
 
     if (alreadyExisting) {
-      return res
-        .status(406)
-        .json({ success: false, message: "User already in the database" });
+      return res.status(406).json({ success: false, message: "User already exists" });
     }
 
-    const salt = await bcrypt.genSalt();
-    const newPassword = await bcrypt.hash(password, salt);
+    const newPassword = role !== "Marshall" ? await bcrypt.hash(password, await bcrypt.genSalt()) : null;
 
-    if (role === "Marshall") {
-      const allSupervisors = await User.findAll({
-        where: {
-          role: "Supervisor",
-        },
-      });
+    await User.create({
+      firstName: firstname,
+      lastName: lastname,
+      email: email || null,
+      phoneNumber,
+      password: newPassword,
+      device,
+      role,
+    });
 
-      if (!allSupervisors || allSupervisors.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "No supervisor found to allocate marshalls to. Please add supervisor to the system and try again.",
-        });
-      }
-
-      const existingSupervsiorsIds = await Relationship.findAll({
-        attributes: ["supervisorId"],
-        group: ["supervisorId"],
-      });
-
-      const supervisorIdsWithRelationships = existingSupervsiorsIds.map(
-        (entry) => entry.supervisorId
-      );
-      const supervisorsWithoutMarshalls = allSupervisors.filter(
-        (s) => !supervisorIdsWithRelationships.includes(s.id)
-      );
-
-      let selectedSupervisorId;
-
-      if (supervisorsWithoutMarshalls.length > 0) {
-        selectedSupervisorId = supervisorsWithoutMarshalls[0].id;
-      } else {
-        const supervisorLoadMap = {};
-
-        for (const supervisor of allSupervisors) {
-          const count = await Relationship.count({
-            where: { supervisorId: supervisor.id },
-          });
-          supervisorLoadMap[supervisor.id] = count;
-        }
-
-        selectedSupervisorId = Object.entries(supervisorLoadMap).sort(
-          (a, b) => a[1] - b[1]
-        )[0][0];
-      }
-      const existingDevice = await User.findOne({
-        where:{device}
-      });
-      if(existingDevice){
-        return res.status(409).json({
-        status: false,
-        message: `Device already allocated to a Marshall.`,
-      });
-      }
-      const marshall = await User.create({
-        firstName: firstname,
-        lastName: lastname,
-        email: email || null,
-        phoneNumber,
-        password: null,
-        device,
-        role,
-      });
-      await Relationship.create({
-        supervisorId: selectedSupervisorId,
-        marshallId: marshall.id,
-      });
-
-      return res.status(200).json({
-        status: true,
-        message: `Marshall created and assigned to Supervisor ID ${selectedSupervisorId}.`,
-      });
-    } else {
-      await User.create({
-        firstName: firstname,
-        lastName: lastname,
-        email: email ? email : null,
-        phoneNumber,
-        password: role !== "Marshall" ? newPassword : null,
-        role,
-      });
-
-      if (role !== "Marshall") {
+    if (role !== "Marshall") {
+      try {
         const transporter = nodemailer.createTransport({
           host: "smtp.gmail.com",
           port: 587,
@@ -146,33 +59,33 @@ exports.signup = async (req, res) => {
           tls: {
             rejectUnauthorized: false,
           },
-          logger: true,
-          debug: true,
         });
 
-        const mailOptions = {
+        await transporter.sendMail({
           from: process.env.EMAIL_FROM,
           to: email,
           subject: "KPI Onboarding",
-          html: `<p>${firstname} ${lastname}, Here is your password <b>${password}</b>. Do not share it with anyone.</p>`,
-        };
-
-        await transporter.sendMail(mailOptions);
+          html: `<p>${firstname} ${lastname}, here is your password: <b>${password}</b>. Do not share it.</p>`,
+        });
+      } catch (mailErr) {
+        console.error("Error sending email:", mailErr);
       }
+    }
 
-      return res
-        .status(200)
-        .json({ status: true, message: "User successfully created." });
-    }
+    return res.status(200).json({
+      status: true,
+      message: role === "Marshall" ? "Marshall created successfully." : "User successfully created.",
+    });
+
   } catch (err) {
+    console.error("Signup error:", err);
     if (role !== "Marshall") {
-      await User.destroy({ where: { phoneNumber } });
+      await User.destroy({ where: { phoneNumber, firstName: firstname, lastName: lastname } });
     }
-    return res
-      .status(500)
-      .json({ status: false, message: "Internal server error", err });
+    return res.status(500).json({ status: false, message: "Internal server error" });
   }
 };
+
 
 exports.login = async (req, res) => {
   let { email, password } = req.body;
@@ -523,27 +436,7 @@ exports.delete = async (req, res) => {
       });
     }
 
-    if (isUser.role === "Supervisor") {
-      const assignedRelationships = await Relationship.findAll({
-        where: { supervisorId: isUser.id },
-      });
-
-      const marshallIds = assignedRelationships.map((rel) => rel.marshallId);
-
-      const otherSupervisors = await User.findAll({
-        where: {
-          role: "Supervisor",
-          id: { [Op.ne]: isUser.id },
-        },
-      });
-
-      if (otherSupervisors.length === 0 && marshallIds.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Cannot delete supervisor: no other supervisors available to reassign marshalls",
-        });
-      }
+    if (isUser.role === "Marshall") {
       const today = new Date().toISOString().split("T")[0];
       await Shift.destroy({
         where: {
@@ -552,79 +445,11 @@ exports.delete = async (req, res) => {
           },
         },
       });
-      const supervisorLoadMap = {};
-
-      for (const supervisor of otherSupervisors) {
-        const count = await Relationship.count({
-          where: { supervisorId: supervisor.id },
-        });
-        supervisorLoadMap[supervisor.id] = count;
-      }
-
-      for (const marshallId of marshallIds) {
-        const leastLoadedSupervisorId = Object.entries(supervisorLoadMap).sort(
-          (a, b) => a[1] - b[1]
-        )[0][0];
-
-        await Relationship.update(
-          { supervisorId: leastLoadedSupervisorId },
-          { where: { marshallId } }
-        );
-
-        supervisorLoadMap[leastLoadedSupervisorId]++;
-      }
-      
-      
-      await Relationship.destroy({ where: { supervisorId: isUser.id } });
-      await User.destroy({ where: { id: isUser.id } });
-      
-      const existingStreet = await Street.count();
-    if(existingStreet === 0){
-      return res
-      .status(200)
-      .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
-    }
-    const existingSupervisor = await User.count({where: {role: "Supervisor"}});
-     if(existingSupervisor === 0){
-       return res
-      .status(200)
-      .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
-    }
-    const existingMarshall = await User.count({where: {role: "Marshall"}});
-     if(existingMarshall === 0){
-       return res
-      .status(200)
-      .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
-    }
-      const shifts = await generateWeeklyScheduleData();
-      await Shift.bulkCreate(shifts);
-
-      return res.status(200).json({
-        status: true,
-        message:
-          "User successfully deleted and marshalls reassigned (if applicable).",
-      });
-    } else if (isUser.role === "Marshall") {
-      const today = new Date().toISOString().split("T")[0];
-      await Shift.destroy({
-        where: {
-          date: {
-            [Op.gte]: today,
-          },
-        },
-      });
-      await Relationship.destroy({ where: { marshallId: isUser.id } });
 
       await User.destroy({ where: { id: isUser.id } });
       const existingStreet = await Street.count();
     if(existingStreet === 0){
       return res
-      .status(200)
-      .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
-    }
-    const existingSupervisor = await User.count({where: {role: "Supervisor"}});
-     if(existingSupervisor === 0){
-       return res
       .status(200)
       .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
     }
