@@ -1,79 +1,88 @@
+const { User } = require("../models");
 const Street = require("../models/street");
 const getNextWeekDates = require("./getDate");
+const { Op } = require("sequelize");
 
 async function generateWeeklyScheduleData() {
   console.log("📋 Generating weekly schedule...");
 
+  // Fetch active streets with shift needs and priority
   const activeStreets = await Street.findAll({
     where: { status: "Active" },
-    attributes: ["streetCode"],
+    attributes: ["streetCode", "priority", "morningShift", "afternoonShift"],
     raw: true,
   });
 
-  const streetCodes = activeStreets.map(street => street.streetCode);
-  console.log(`🛣️ Found ${streetCodes.length} active streets`);
-
-  if (streetCodes.length === 0) {
-    throw new Error("No active streets available");
+  // Fetch all marshalls
+  const marshalls = await User.findAll({
+    where: { role: "Marshall" },
+    attributes: ["id"],
+    raw: true,
+  });
+  console.log("All marshalls: ",marshalls)
+  if (!activeStreets.length || !marshalls.length) {
+    throw new Error("No active streets or no marshalls found.");
   }
 
-  const shifts = [];
+  const marshallShiftCount = {};
+  marshalls.forEach(({ id }) => {
+    marshallShiftCount[id] = 0;
+  });
+  console.log("Marshall shift count: ",marshallShiftCount)
   const allWeekDates = getNextWeekDates();
-  console.log("📅 All week dates:", allWeekDates);
-
   const todayDateStr = new Date().toISOString().split("T")[0];
   const upcomingDates = allWeekDates.filter(dateStr => dateStr >= todayDateStr);
-  console.log("📆 Upcoming dates for scheduling:", upcomingDates);
 
-  const marshallShiftCount = {};
-  marshalls.forEach(({ marshallId }) => {
-    marshallShiftCount[marshallId] = 0;
-  });
+  const shifts = [];
 
   for (const dateStr of upcomingDates) {
     const date = new Date(dateStr).toISOString().split("T")[0];
     const isSaturday = new Date(dateStr).getDay() === 6;
-    console.log(`🗓️ Scheduling for ${date} (${isSaturday ? "Saturday" : "Weekday"})`);
-
-    let shiftTypes = isSaturday ? ["Morning"] : ["Morning", "Afternoon"];
-    shiftTypes = shiftTypes.sort(() => Math.random() - 0.5);
-    console.log(`🕒 Shift types for ${date}:`, shiftTypes);
-
+    const shiftTypes = isSaturday ? ["Morning"] : ["Morning", "Afternoon"];
     const marshallAssignedToday = new Set();
 
-    for (const shiftType of shiftTypes) {
-      let availableStreetCodes = [...streetCodes].sort(() => Math.random() - 0.5);
-      console.log(`🚧 Available streets for ${shiftType} shift:`, availableStreetCodes);
+    console.log(`\n📅 Scheduling for ${date} (${isSaturday ? "Saturday" : "Weekday"})`);
 
-      const sortedMarshalls = [...marshalls]
-        .filter(({ marshallId }) => !marshallAssignedToday.has(marshallId))
-        .sort((a, b) => marshallShiftCount[a.marshallId] - marshallShiftCount[b.marshallId]);
+    for (const shiftType of shiftTypes.sort(() => Math.random() - 0.5)) {
+      // Sort streets by priority (1 = highest)
+      const sortedStreets = [...activeStreets].sort((a, b) => a.priority - b.priority);
 
-      for (const { marshallId } of sortedMarshalls) {
-        if (availableStreetCodes.length === 0) break;
-        if (marshallAssignedToday.has(marshallId)) continue;
+      for (const street of sortedStreets) {
+        const requiredCount =
+          shiftType === "Morning" ? street.morningShift : street.afternoonShift;
 
-        const streetCode = availableStreetCodes.pop();
+        let assignedCount = 0;
 
-        console.log(`✅ Assigning Marshall ${marshallId} to ${streetCode} on ${date} (${shiftType})`);
+        // Prepare marshall list: available today, sorted by fewest shifts
+        const availableMarshalls = marshalls
+          .filter(({ id }) => !marshallAssignedToday.has(id))
+          .sort((a, b) => marshallShiftCount[a.id] - marshallShiftCount[b.id]);
 
-        shifts.push({
-          marshallId,
-          supervisorId: null, // Or assign if needed
-          date,
-          shiftType,
-          streetCode,
-        });
+        for (const { id: marshallId } of availableMarshalls) {
+          if (assignedCount >= requiredCount) break;
 
-        marshallShiftCount[marshallId]++;
-        marshallAssignedToday.add(marshallId);
+          shifts.push({
+            marshallId,
+            date,
+            shiftType,
+            streetCode: street.streetCode,
+          });
+
+          marshallShiftCount[marshallId]++;
+          marshallAssignedToday.add(marshallId);
+          assignedCount++;
+
+          console.log(
+            `✅ Assigned Marshall ${marshallId} to ${street.streetCode} on ${date} (${shiftType})`
+          );
+        }
       }
 
-      console.log(`📊 Shift assignment complete for ${shiftType} on ${date}`);
+      console.log(`📊 Completed ${shiftType} shift for ${date}`);
     }
   }
 
-  console.log("🎯 All shifts generated:", shifts.length);
+  console.log(`\n🎯 Total shifts generated: ${shifts.length}`);
   return shifts;
 }
 

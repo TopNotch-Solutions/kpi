@@ -33,6 +33,7 @@ exports.generateWeeklySchedule = async (req, res) => {
       });
     }
     const shifts = await generateWeeklyScheduleData();
+    console.log("Here are my shifts: ",shifts)
     await Shift.bulkCreate(shifts);
     res
       .status(201)
