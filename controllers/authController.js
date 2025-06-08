@@ -16,11 +16,15 @@ exports.signup = async (req, res) => {
   let { firstname, lastname, email, phoneNumber, role, device } = req.body;
 
   if (!firstname || !lastname || !phoneNumber || !role) {
-    return res.status(400).json({ success: false, message: "Missing required fields" });
+    return res
+      .status(400)
+      .json({ success: false, message: "Missing required fields" });
   }
 
   if (role !== "Marshall" && !email) {
-    return res.status(400).json({ success: false, message: "Email not provided" });
+    return res
+      .status(400)
+      .json({ success: false, message: "Email not provided" });
   }
 
   const password = generateRandomString();
@@ -31,10 +35,15 @@ exports.signup = async (req, res) => {
     });
 
     if (alreadyExisting) {
-      return res.status(406).json({ success: false, message: "User already exists" });
+      return res
+        .status(406)
+        .json({ success: false, message: "User already exists" });
     }
 
-    const newPassword = role !== "Marshall" ? await bcrypt.hash(password, await bcrypt.genSalt()) : null;
+    const newPassword =
+      role !== "Marshall"
+        ? await bcrypt.hash(password, await bcrypt.genSalt())
+        : null;
 
     await User.create({
       firstName: firstname,
@@ -45,6 +54,32 @@ exports.signup = async (req, res) => {
       device,
       role,
     });
+
+    console.log("Role received:", role);
+
+    if (role === "Marshall") {
+      const today = new Date().toISOString().split("T")[0];
+      const count = await Shift.count({
+        where: {
+          date: {
+            [Op.gte]: today,
+          },
+        },
+      });
+      if (count >= 1) {
+        await Shift.destroy({
+          where: {
+            date: {
+              [Op.gte]: today,
+            },
+          },
+        });
+        
+        const shifts = await generateWeeklyScheduleData();
+        console.log("generating new shift:", shifts);
+        await Shift.bulkCreate(shifts);
+      }
+    }
 
     if (role !== "Marshall") {
       try {
@@ -74,18 +109,23 @@ exports.signup = async (req, res) => {
 
     return res.status(200).json({
       status: true,
-      message: role === "Marshall" ? "Marshall created successfully." : "User successfully created.",
+      message:
+        role === "Marshall"
+          ? "Marshall created successfully."
+          : "User successfully created.",
     });
-
   } catch (err) {
     console.error("Signup error:", err);
     if (role !== "Marshall") {
-      await User.destroy({ where: { phoneNumber, firstName: firstname, lastName: lastname } });
+      await User.destroy({
+        where: { phoneNumber, firstName: firstname, lastName: lastname },
+      });
     }
-    return res.status(500).json({ status: false, message: "Internal server error" });
+    return res
+      .status(500)
+      .json({ status: false, message: "Internal server error" });
   }
 };
-
 
 exports.login = async (req, res) => {
   let { email, password } = req.body;
@@ -145,28 +185,32 @@ exports.login = async (req, res) => {
 };
 
 exports.userDetails = async (req, res) => {
-   const { email } = req.body;
-   if (!email)
+  const { email } = req.body;
+  if (!email)
     return res
       .status(400)
       .json({ success: false, message: "Email not provided" });
-      try {
+  try {
     const existingUser = await User.findOne({ where: { email } });
     if (!existingUser) {
       return res
         .status(404)
         .json({ status: false, message: "User not found!" });
     }
-    console.log(existingUser)
-    return res.status(200).json({status: true, message: "User successfully retrieved!", data: existingUser})
-  }catch (err) {
+    console.log(existingUser);
+    return res
+      .status(200)
+      .json({
+        status: true,
+        message: "User successfully retrieved!",
+        data: existingUser,
+      });
+  } catch (err) {
     return res
       .status(500)
       .json({ status: false, message: "Internal server error", err });
   }
-
-}
-
+};
 
 exports.forgotPassword = async (req, res) => {
   const { email } = req.body;
@@ -322,7 +366,7 @@ exports.details = async (req, res) => {
         where: { id: userId },
       }
     );
-    const user = await User.findOne({where: {id:userId}});
+    const user = await User.findOne({ where: { id: userId } });
     const newUser = {
       id: user.id,
       firstname: user.firstName,
@@ -334,7 +378,7 @@ exports.details = async (req, res) => {
     return res.status(200).json({
       status: true,
       message: "User details successfully updated",
-      currentUser: newUser
+      currentUser: newUser,
     });
   } catch (err) {
     return res
@@ -425,10 +469,10 @@ exports.delete = async (req, res) => {
       .status(400)
       .json({ success: false, message: "User ID not provided" });
   }
-  console.log("My email" , userId)
+  console.log("My email", userId);
   try {
     const isUser = await User.findOne({ where: { email: userId } });
-    console.log(isUser)
+    console.log(isUser);
     if (!isUser) {
       return res.status(404).json({
         status: false,
@@ -448,20 +492,30 @@ exports.delete = async (req, res) => {
 
       await User.destroy({ where: { id: isUser.id } });
       const existingStreet = await Street.count();
-    if(existingStreet === 0){
-      return res
-      .status(200)
-      .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
-    }
-    const existingMarshall = await User.count({where: {role: "Marshall"}});
-     if(existingMarshall === 0){
-       return res
-      .status(200)
-      .json({ success: true, message: "User successfully deleted and marshalls reassigned (if applicable)." });
-    }
+      if (existingStreet === 0) {
+        return res
+          .status(200)
+          .json({
+            success: true,
+            message:
+              "User successfully deleted and marshalls reassigned (if applicable).",
+          });
+      }
+      const existingMarshall = await User.count({
+        where: { role: "Marshall" },
+      });
+      if (existingMarshall === 0) {
+        return res
+          .status(200)
+          .json({
+            success: true,
+            message:
+              "User successfully deleted and marshalls reassigned (if applicable).",
+          });
+      }
       const shifts = await generateWeeklyScheduleData();
       await Shift.bulkCreate(shifts);
-      console.log("deleting user.......................",userId)
+      console.log("deleting user.......................", userId);
       return res.status(200).json({
         status: true,
         message: "Marshall successfully deleted and schedule updated.",

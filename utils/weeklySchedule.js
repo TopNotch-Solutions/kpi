@@ -53,11 +53,19 @@ async function generateWeeklyScheduleData() {
 
         let assignedCount = 0;
 
-        // Prepare marshall list: available today, sorted by fewest shifts
-        const availableMarshalls = marshalls
-          .filter(({ id }) => !marshallAssignedToday.has(id))
-          .sort((a, b) => marshallShiftCount[a.id] - marshallShiftCount[b.id]);
+        // // Prepare marshall list: available today, sorted by fewest shifts
+        // const availableMarshalls = marshalls
+        //   .filter(({ id }) => !marshallAssignedToday.has(id))
+        //   .sort((a, b) => marshallShiftCount[a.id] - marshallShiftCount[b.id]);
 
+        const availableMarshalls = marshalls.filter(({ id }) => !marshallAssignedToday.has(id));
+
+// Add random weight while still favoring lower shift counts
+availableMarshalls.sort((a, b) => {
+  const aScore = marshallShiftCount[a.id] + Math.random();
+  const bScore = marshallShiftCount[b.id] + Math.random();
+  return aScore - bScore;
+});
         for (const { id: marshallId } of availableMarshalls) {
           if (assignedCount >= requiredCount) break;
 
