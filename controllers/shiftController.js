@@ -16,7 +16,7 @@ exports.generateWeeklySchedule = async (req, res) => {
      if(existingMarshall === 0){
       return res
       .status(500)
-      .json({ success: false, message: "There are no marshalls to allocate supervisors and streets to." });
+      .json({ success: false, message: "There are no marshalls to allocate to streets." });
     }
     const weekDates = getNextWeekDates().map(
       (date) => new Date(date).toISOString().split("T")[0]
@@ -124,7 +124,7 @@ exports.daily = async (req, res) => {
         {
           model: User,
           as: "Marshall",
-          attributes: ["id", "firstName", "lastName"]
+          attributes: ["id", "firstName", "lastName", "device"]
         },
         {
           model: User,
@@ -159,7 +159,8 @@ exports.daily = async (req, res) => {
             name: `${shift["Supervisor.firstName"]} ${shift["Supervisor.lastName"]}`
           },
           shiftType: shift.shiftType,
-          streetCode: shift.streetCode
+          streetCode: shift.streetCode,
+          device: shift["Marshall.device"]
         };
       });
 
